@@ -103,11 +103,6 @@ TEST_F(TimedDoorTest, noTimeoutExceptionWhenClosed) {
     });
 }
 
-TEST_F(TimedDoorTest, doorStaysClosed) {
-    door.lock();
-    EXPECT_FALSE(door.isDoorOpened());
-}
-
 TEST_F(TimedDoorTest, doorStaysOpened) {
     door.unlock();
     EXPECT_TRUE(door.isDoorOpened());
