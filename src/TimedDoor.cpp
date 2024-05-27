@@ -1,119 +1,60 @@
 // Copyright 2024 Smirnova Darya
 
-#include <gtest/gtest.h>
-#include <gmock/gmock.h>
-#include <cstdint>
+#include <stdexcept>
 #include <thread> // NOLINT [build/c++11]
 #include <chrono> // NOLINT [build/c++11]
 
 #include "TimedDoor.h"
 
-class MockTimerClient : public TimerClient {
- public:
-    MOCK_METHOD(void, Timeout, (), (override));
-};
-
-class TimedDoorTest : public ::testing::Test {
- protected:
-    TimedDoor door;
-    Timer timer;
-    MockTimerClient *mockClient;
- public:
-    TimedDoorTest() : door(1), timer() {}
-
- protected:
-    void SetUp() override {
-        mockClient = new MockTimerClient();
-    }
-
-    void TearDown() override {
-        delete mockClient;
-    }
-};
-
-TEST_F(TimedDoorTest, lockAfterUnlock) {
-    door.unlock();
-    door.lock();
-    EXPECT_FALSE(door.isDoorOpened());
+void Timer::sleep(int seconds) {
+     std::this_thread::sleep_for(std::chrono::seconds(seconds));
 }
 
-TEST_F(TimedDoorTest, unlockAndLockMultipleTimes) {
-    for (int i = 0; i < 3; ++i) {
-        door.unlock();
-        EXPECT_TRUE(door.isDoorOpened());
-        door.lock();
-        EXPECT_FALSE(door.isDoorOpened());
+void Timer::tregister(int seconds, TimerClient* timerClient) {
+    client = timerClient;
+    sleep(seconds);
+    client->Timeout();
+    client = nullptr;
+}
+
+DoorTimerAdapter::DoorTimerAdapter(TimedDoor& door) : door(door) {}
+
+void DoorTimerAdapter::Timeout() {
+    if (door.isDoorOpened()) {
+        throw std::runtime_error("Door has been opened for too long!");
     }
 }
 
-TEST_F(TimedDoorTest, stateThrowOnUnlocked) {
-    door.unlock();
-    EXPECT_THROW(door.throwState(), std::runtime_error);
+TimedDoor::TimedDoor(int timeout) : iTimeout(timeout), isOpened(false) {
+    adapter = new DoorTimerAdapter(*this);
 }
 
-TEST_F(TimedDoorTest, stateThrowOnLocked) {
-    EXPECT_THROW(door.throwState(), std::runtime_error);
+bool TimedDoor::isDoorOpened() {
+    return isOpened;
 }
 
-TEST_F(TimedDoorTest, lockTwiceThrowsException) {
-    door.unlock();
-    door.lock();
-    EXPECT_THROW(door.lock(), std::logic_error);
+void TimedDoor::unlock() {
+    if (isOpened) {
+        throw std::logic_error("Door already unlocked");
+    }
+    isOpened = true;
 }
 
-TEST_F(TimedDoorTest, unlockTwiceThrowsException) {
-    door.unlock();
-    EXPECT_THROW(door.unlock(), std::logic_error);
+void TimedDoor::lock() {
+    if (!isOpened) {
+        throw std::logic_error("Door already locked");
+    }
+    isOpened = false;
 }
 
-TEST_F(TimedDoorTest, doorTimeoutWhenOpened) {
-    door.unlock();
-    DoorTimerAdapter adapter(door);
-    EXPECT_THROW(adapter.Timeout(), std::runtime_error);
+int TimedDoor::getTimeOut() const {
+    return iTimeout;
 }
 
-TEST_F(TimedDoorTest, doorTimeoutWhenClosed) {
-    DoorTimerAdapter adapter(door);
-    EXPECT_NO_THROW(adapter.Timeout());
-}
-
-TEST_F(TimedDoorTest, timerTimeoutTriggered) {
-    EXPECT_CALL(*mockClient, Timeout()).Times(1);
-    timer.tregister(1, mockClient);
-}
-
-TEST_F(TimedDoorTest, doorInitialization) {
-    EXPECT_EQ(1, door.getTimeOut());
-    EXPECT_FALSE(door.isDoorOpened());
-}
-
-TEST_F(TimedDoorTest, doorOpenedForTooLongException) {
-    door.unlock();
-    EXPECT_THROW({
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-        DoorTimerAdapter adapter(door);
-        adapter.Timeout();
-    }, std::runtime_error);
-}
-
-TEST_F(TimedDoorTest, noTimeoutExceptionWhenClosed) {
-    EXPECT_NO_THROW({
-        DoorTimerAdapter adapter(door);
-        adapter.Timeout();
-    });
-}
-
-TEST_F(TimedDoorTest, timerClientIsNullAfterTimeout) {
-    timer.tregister(1, mockClient);
-    EXPECT_EQ(nullptr, timer.client);
-}
-
-TEST_F(TimedDoorTest, doorStaysClosed) {
-    door.lock();
-    EXPECT_FALSE(door.isDoorOpened());
-}
-
-TEST_F(TimedDoorTest, doorStaysOpened) {
-    door.unlock();
-    EXPECT_TRUE(door.isDoorOpened());
+void TimedDoor::throwState() {
+    if (isOpened) {
+        throw std::runtime_error("Door is opened!");
+    } else {
+        throw std::runtime_error("Door is closed!");
+    }
 }
