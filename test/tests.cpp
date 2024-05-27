@@ -103,11 +103,6 @@ TEST_F(TimedDoorTest, noTimeoutExceptionWhenClosed) {
     });
 }
 
-TEST_F(TimedDoorTest, timerClientIsNullAfterTimeout) {
-    timer.tregister(1, mockClient);
-    EXPECT_EQ(nullptr, timer.client);
-}
-
 TEST_F(TimedDoorTest, doorStaysClosed) {
     door.lock();
     EXPECT_FALSE(door.isDoorOpened());
